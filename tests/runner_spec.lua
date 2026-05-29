@@ -135,12 +135,6 @@ describe("codetour.runner (quickfix-driven)", function()
     assert.is_true(has_qf)
   end)
 
-  it("goto_step jumps to entry n", function()
-    runner.start(make_tour())
-    runner.goto_step(3)
-    assert.equals(3, vim.fn.getqflist({ idx = 0 }).idx)
-  end)
-
   it("end_tour closes quickfix and clears state", function()
     runner.start(make_tour())
     runner.end_tour()

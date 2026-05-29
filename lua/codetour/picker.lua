@@ -83,28 +83,4 @@ function M.pick_tour_for_resume()
   end)
 end
 
-function M.pick_step()
-  local tour = state.active_tour()
-  if not tour then
-    return M.pick_tour()
-  end
-  local items = {}
-  for i, step in ipairs(tour.steps) do
-    table.insert(items, {
-      text = string.format("%d. %s", i, step.title or step.description or step.file or step.contents or ""),
-      idx = i,
-    })
-  end
-  vim.ui.select(items, {
-    prompt = "CodeTour Step",
-    format_item = function(it)
-      return it.text
-    end,
-  }, function(choice)
-    if choice then
-      runner.goto_step(choice.idx)
-    end
-  end)
-end
-
 return M

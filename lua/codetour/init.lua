@@ -18,12 +18,6 @@ end
 M.start = function(...)
   return require("codetour.runner").start(...)
 end
-M.next = function()
-  return require("codetour.runner").next()
-end
-M.prev = function()
-  return require("codetour.runner").prev()
-end
 M.end_tour = function()
   return require("codetour.runner").end_tour()
 end

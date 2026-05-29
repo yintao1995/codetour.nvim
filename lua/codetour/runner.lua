@@ -146,18 +146,6 @@ function M.start(tour)
   pcall(vim.cmd, "cfirst")
 end
 
-function M.next()
-  pcall(vim.cmd, "cnext")
-end
-
-function M.prev()
-  pcall(vim.cmd, "cprevious")
-end
-
-function M.goto_step(n)
-  pcall(vim.cmd, "cc " .. n)
-end
-
 function M.end_tour()
   pcall(vim.cmd, "cclose")
   state.end_tour()
