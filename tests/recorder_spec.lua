@@ -1,0 +1,57 @@
+local recorder = require("codetour.recorder")
+local state = require("codetour.state")
+local loader = require("codetour.loader")
+
+describe("codetour.recorder", function()
+  local tmp_tours_dir
+  local tmp_project
+
+  before_each(function()
+    state.reset()
+    tmp_tours_dir = vim.fn.tempname()
+    tmp_project = vim.fn.tempname()
+    vim.fn.mkdir(tmp_tours_dir, "p")
+    vim.fn.mkdir(tmp_project, "p")
+    require("codetour").setup({ tours_dir = tmp_tours_dir })
+  end)
+
+  it("new_tour creates a fresh tour file in tours_dir with projectRoot from cwd", function()
+    vim.cmd("cd " .. tmp_project)
+    local tour = recorder.new_tour({ title = "My Tour", description = "desc" })
+    assert.equals("My Tour", tour.title)
+    assert.equals(0, #tour.steps)
+    assert.matches(tmp_tours_dir .. "/my%-tour%.tour$", tour._path)
+    assert.is_string(tour.projectRoot)
+    local on_disk = loader.load(tour._path)
+    assert.equals("My Tour", on_disk.title)
+    assert.equals(tour.projectRoot, on_disk.projectRoot)
+  end)
+
+  it("add_step computes file path relative to tour.projectRoot", function()
+    vim.cmd("cd " .. tmp_project)
+    local tour = recorder.new_tour({ title = "T" })
+    local sample = tmp_project .. "/sub/sample.lua"
+    vim.fn.mkdir(tmp_project .. "/sub", "p")
+    vim.fn.writefile({ "a", "b", "c", "d" }, sample)
+    vim.cmd("edit " .. sample)
+    vim.api.nvim_win_set_cursor(0, { 3, 0 })
+
+    recorder.add_step("explain c")
+    local refreshed = loader.load(tour._path)
+    assert.equals(1, #refreshed.steps)
+    assert.equals("sub/sample.lua", refreshed.steps[1].file)
+    assert.equals(3, refreshed.steps[1].line)
+    assert.equals("explain c", refreshed.steps[1].description)
+  end)
+
+  it("add_step rejects buffer outside projectRoot", function()
+    vim.cmd("cd " .. tmp_project)
+    recorder.new_tour({ title = "T" })
+    local outside = vim.fn.tempname() .. ".lua"
+    vim.fn.writefile({ "x" }, outside)
+    vim.cmd("edit " .. outside)
+    local ok, err = pcall(recorder.add_step, "should fail")
+    assert.is_false(ok)
+    assert.matches("outside projectRoot", err)
+  end)
+end)
