@@ -34,7 +34,7 @@ describe("codetour.runner (quickfix-driven)", function()
     local r = qf.items[1]
     assert.equals(0, r.valid)
     assert.equals("ruler", r.user_data.kind)
-    assert.matches("^0%s+1$", r.text)
+    assert.matches("^%s+0%s+1$", r.text)
 
     -- header
     local h = qf.items[2]
@@ -68,7 +68,7 @@ describe("codetour.runner (quickfix-driven)", function()
       end_idx = #qf.items,
     })
     assert.equals(6, #lines)
-    assert.matches("^0%s+1$", lines[1])
+    assert.matches("^%s+0%s+1$", lines[1])
     assert.equals("demo", lines[2])
     assert.matches("^├── AAAA1%s+init%.lua:3%s+step1", lines[3])
     assert.matches("^│   ├── AAAA2%s+util%.lua:12%s+step2", lines[4])
@@ -156,7 +156,7 @@ describe("codetour.runner (quickfix-driven)", function()
     local lines = runner.render_tour_lines(make_tour())
     assert.equals(before_id, vim.fn.getqflist({ id = 0 }).id)
     assert.equals(6, #lines)
-    assert.matches("^0%s+1$", lines[1])
+    assert.matches("^%s+0%s+1$", lines[1])
     assert.equals("demo", lines[2])
     assert.matches("^├── AAAA1%s+init%.lua:3%s+step1", lines[3])
   end)

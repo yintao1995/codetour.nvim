@@ -70,7 +70,7 @@ local function step_to_qf_item(root, step)
 end
 
 local function build_depth_ruler(max_depth)
-  local parts = {}
+  local parts = { string.rep(" ", 4) } -- 跳过 "├── " 让数字与 marker 起点对齐
   for d = 0, max_depth do
     parts[#parts + 1] = string.format("%-4d", d)
   end
