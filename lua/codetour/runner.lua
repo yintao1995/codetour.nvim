@@ -69,9 +69,29 @@ local function step_to_qf_item(root, step)
   }
 end
 
+local function build_depth_ruler(max_depth)
+  local parts = {}
+  for d = 0, max_depth do
+    parts[#parts + 1] = string.format("%-4d", d)
+  end
+  return (table.concat(parts):gsub("%s+$", ""))
+end
+
 local function tour_to_items(tour)
   local root = loader.project_root_abs(tour)
+  local max_depth = 0
+  for _, step in ipairs(tour.steps) do
+    local d = step.depth or 0
+    if d > max_depth then
+      max_depth = d
+    end
+  end
   local items = {
+    {
+      valid = 0,
+      text = build_depth_ruler(max_depth),
+      user_data = { kind = "ruler" },
+    },
     {
       valid = 0,
       text = tour.title,
@@ -101,8 +121,8 @@ local function items_to_lines(items, start_idx, end_idx)
   for idx = start_idx, end_idx do
     local it = items[idx] or {}
     local ud = it.user_data or {}
-    if ud.kind == "header" then
-      table.insert(lines, it.text or ".")
+    if ud.kind == "ruler" or ud.kind == "header" then
+      table.insert(lines, it.text or "")
     elseif ud.kind == "step" then
       local section = prefix_of(ud.depth) .. (ud.marker or "")
       local marker_block = pad_right(section, marker_section_w)
