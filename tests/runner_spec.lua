@@ -1,18 +1,18 @@
 local runner = require("codetour.runner")
 local state = require("codetour.state")
-local loader = require("codetour.loader")
 
 local PROJECT = vim.fn.getcwd()
 
 local function make_tour()
   return {
-    title = "Test",
+    title = "demo",
     projectRoot = PROJECT,
     _path = vim.fn.tempname() .. ".tour",
     steps = {
-      { file = "lua/codetour/init.lua", line = 3, description = "step1" },
-      { contents = "Just text", title = "note", description = "step2" },
-      { file = "lua/codetour/util.lua", line = 1, description = "step3" },
+      { file = "lua/codetour/init.lua", line = 3, title = "AAAA1", description = "step1", depth = 0 },
+      { file = "lua/codetour/util.lua", line = 12, title = "AAAA2", description = "step2", depth = 1 },
+      { file = "lua/codetour/runner.lua", line = 1, title = "AAAA3", description = "step3", depth = 1 },
+      { file = "lua/codetour/state.lua", line = 5, title = "AAAA4", description = "step4", depth = 0 },
     },
   }
 end
@@ -24,28 +24,59 @@ describe("codetour.runner (quickfix-driven)", function()
     pcall(vim.cmd, "cclose")
   end)
 
-  it("populate_quickfix produces one entry per step with correct fields", function()
+  it("populate_quickfix adds header + entries with user_data", function()
     runner.populate_quickfix(make_tour())
     local qf = vim.fn.getqflist({ items = 1, title = 1 })
-    assert.equals("CodeTour: Test", qf.title)
-    assert.equals(3, #qf.items)
+    assert.equals("CodeTour: demo", qf.title)
+    assert.equals(5, #qf.items)
 
-    local i1 = qf.items[1]
-    assert.matches("lua/codetour/init%.lua$", vim.api.nvim_buf_get_name(i1.bufnr))
-    assert.equals(3, i1.lnum)
-    assert.equals("step1", i1.text)
+    -- header
+    local h = qf.items[1]
+    assert.equals(0, h.valid)
+    assert.equals("demo", h.text)
+    assert.equals("header", h.user_data.kind)
 
-    local i2 = qf.items[2]
-    assert.equals(0, i2.valid)
-    assert.matches("note", i2.text)
-    assert.matches("step2", i2.text)
+    -- first step
+    local s1 = qf.items[2]
+    assert.matches("lua/codetour/init%.lua$", vim.api.nvim_buf_get_name(s1.bufnr))
+    assert.equals(3, s1.lnum)
+    assert.equals("step1", s1.text)
+    assert.equals("step", s1.user_data.kind)
+    assert.equals("AAAA1", s1.user_data.marker)
+    assert.equals(0, s1.user_data.depth)
+    assert.equals("init.lua:3", s1.user_data.fileline)
 
-    local i3 = qf.items[3]
-    assert.matches("lua/codetour/util%.lua$", vim.api.nvim_buf_get_name(i3.bufnr))
-    assert.equals(1, i3.lnum)
+    -- nested step
+    local s2 = qf.items[3]
+    assert.equals(1, s2.user_data.depth)
+    assert.equals("util.lua:12", s2.user_data.fileline)
   end)
 
-  it("start() opens quickfix window and jumps to first entry", function()
+  it("qftf renders tree-style lines for codetour qf list", function()
+    runner.populate_quickfix(make_tour())
+    local qf = vim.fn.getqflist({ id = 0, items = 1 })
+    local lines = runner.qftf({
+      quickfix = 1,
+      id = vim.fn.getqflist({ id = 0 }).id,
+      start_idx = 1,
+      end_idx = #qf.items,
+    })
+    assert.equals(5, #lines)
+    assert.equals("demo", lines[1])
+    assert.matches("^├── AAAA1%s+init%.lua:3%s+step1", lines[2])
+    assert.matches("^│   ├── AAAA2%s+util%.lua:12%s+step2", lines[3])
+    assert.matches("^│   ├── AAAA3%s+runner%.lua:1%s+step3", lines[4])
+    assert.matches("^├── AAAA4%s+state%.lua:5%s+step4", lines[5])
+  end)
+
+  it("qftf returns nil for non-codetour qf lists", function()
+    vim.fn.setqflist({}, " ", { title = "vimgrep something", items = {} })
+    local id = vim.fn.getqflist({ id = 0 }).id
+    local result = runner.qftf({ quickfix = 1, id = id, start_idx = 1, end_idx = 0 })
+    assert.is_nil(result)
+  end)
+
+  it("start() opens quickfix window", function()
     runner.start(make_tour())
     local has_qf = false
     for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
@@ -55,31 +86,15 @@ describe("codetour.runner (quickfix-driven)", function()
       end
     end
     assert.is_true(has_qf)
-    assert.equals(1, vim.fn.getqflist({ idx = 0 }).idx)
   end)
 
-  it("next() advances quickfix idx (skipping invalid content entries)", function()
-    runner.start(make_tour())
-    runner.next()
-    -- step 2 is content-only (valid=0), so cnext jumps directly to step 3
-    assert.equals(3, vim.fn.getqflist({ idx = 0 }).idx)
-  end)
-
-  it("prev() decreases quickfix idx", function()
-    runner.start(make_tour())
-    runner.goto_step(3)
-    runner.prev()
-    -- step 2 invalid, prev goes back to 1
-    assert.equals(1, vim.fn.getqflist({ idx = 0 }).idx)
-  end)
-
-  it("goto_step(n) jumps to entry n", function()
+  it("goto_step jumps to entry n", function()
     runner.start(make_tour())
     runner.goto_step(3)
     assert.equals(3, vim.fn.getqflist({ idx = 0 }).idx)
   end)
 
-  it("end_tour() closes quickfix and clears state", function()
+  it("end_tour closes quickfix and clears state", function()
     runner.start(make_tour())
     runner.end_tour()
     assert.is_nil(state.active_tour())

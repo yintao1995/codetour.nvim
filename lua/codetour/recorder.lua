@@ -32,7 +32,11 @@ function M.new_tour(opts)
   return tour
 end
 
-function M.add_step(description)
+function M.add_step(opts)
+  opts = opts or {}
+  if type(opts) == "string" then
+    opts = { description = opts }
+  end
   local tour = state.active_tour()
   assert(tour, "no active tour")
   local bufname = vim.api.nvim_buf_get_name(0)
@@ -47,8 +51,12 @@ function M.add_step(description)
   local step = {
     file = rel,
     line = row,
-    description = description or "",
+    description = opts.description or "",
+    depth = 0,
   }
+  if opts.title and opts.title ~= "" then
+    step.title = opts.title
+  end
   table.insert(tour.steps, step)
   loader.save(tour)
   return step

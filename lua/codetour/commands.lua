@@ -37,18 +37,24 @@ function M.register()
     vim.notify(string.format("CodeTour: 已创建 %s\nprojectRoot=%s", tour._path, tour.projectRoot))
   end, { nargs = "?", desc = "新建 tour（projectRoot 自动取自当前 cwd）" })
 
-  cmd("CodeTourAddStep", function(args)
-    local desc = args.args
-    if desc == "" then
-      desc = vim.fn.input("Step description: ")
-    end
-    local ok, result = pcall(require("codetour.recorder").add_step, desc)
+  cmd("CodeTourAddStep", function()
+    local title = vim.fn.input("Marker (函数名等，可留空): ")
+    local desc = vim.fn.input("Description: ")
+    local ok, result = pcall(require("codetour.recorder").add_step, {
+      title = title ~= "" and title or nil,
+      description = desc,
+    })
     if not ok then
       vim.notify("CodeTour: 添加 step 失败：" .. tostring(result), vim.log.levels.ERROR)
       return
     end
-    vim.notify("CodeTour: step 已追加 (" .. result.file .. ":" .. result.line .. ")")
-  end, { nargs = "?", desc = "把当前光标位置作为 step 加入正在录制的 tour" })
+    vim.notify(string.format(
+      "CodeTour: step 已追加 [%s] %s:%d",
+      result.title or "",
+      vim.fs.basename(result.file),
+      result.line
+    ))
+  end, { desc = "把当前光标位置作为 step 加入正在录制的 tour（prompt: marker + description）" })
 
   cmd("CodeTourOpenDir", function()
     local dir = require("codetour").config.tours_dir

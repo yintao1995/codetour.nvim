@@ -9,6 +9,10 @@ M.config = {
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
   vim.fn.mkdir(M.config.tours_dir, "p")
+  _G.codetour_qftf = function(info)
+    return require("codetour.runner").qftf(info)
+  end
+  vim.o.quickfixtextfunc = "v:lua.codetour_qftf"
 end
 
 M.start = function(...)

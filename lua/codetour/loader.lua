@@ -43,6 +43,11 @@ function M.load(path)
   if err then
     return nil, err
   end
+  for _, step in ipairs(data.steps) do
+    if step.depth == nil then
+      step.depth = 0
+    end
+  end
   data._path = path
   return data
 end
