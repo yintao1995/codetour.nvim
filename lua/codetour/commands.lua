@@ -9,21 +9,24 @@ function M.register()
     require("codetour.picker").pick_tour()
   end, { desc = "选择并开始一个 tour" })
 
-  cmd("CodeTourNext", function()
-    require("codetour.runner").next()
-  end, { desc = "下一步" })
+  -- [DEPRECATED 2026-05-29] 由 vim 原生 :cnext 替代；保留以备恢复
+  -- cmd("CodeTourNext", function()
+  --   require("codetour.runner").next()
+  -- end, { desc = "下一步" })
 
-  cmd("CodeTourPrev", function()
-    require("codetour.runner").prev()
-  end, { desc = "上一步" })
+  -- [DEPRECATED 2026-05-29] 由 vim 原生 :cprevious 替代
+  -- cmd("CodeTourPrev", function()
+  --   require("codetour.runner").prev()
+  -- end, { desc = "上一步" })
 
   cmd("CodeTourEnd", function()
     require("codetour.runner").end_tour()
   end, { desc = "退出当前 tour" })
 
-  cmd("CodeTourStep", function()
-    require("codetour.picker").pick_step()
-  end, { desc = "跳到指定步骤" })
+  -- [DEPRECATED 2026-05-29] quickfix 窗口本身就是 step picker，按 <CR> 跳
+  -- cmd("CodeTourStep", function()
+  --   require("codetour.picker").pick_step()
+  -- end, { desc = "跳到指定步骤" })
 
   cmd("CodeTourNew", function(args)
     local title = args.args
