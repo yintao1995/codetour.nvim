@@ -1,0 +1,23 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Sample Tour",
+  "description": "A tour for tests",
+  "projectRoot": "~/projects/codetour.nvim",
+  "ref": "main",
+  "steps": [
+    {
+      "file": "lua/codetour/init.lua",
+      "line": 1,
+      "title": "Entry",
+      "description": "Module entry"
+    },
+    {
+      "contents": "Standalone note",
+      "description": "Just a note"
+    },
+    {
+      "directory": "lua/codetour",
+      "description": "All source"
+    }
+  ]
+}
