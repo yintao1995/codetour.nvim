@@ -1,5 +1,6 @@
 local loader = require("codetour.loader")
 local runner = require("codetour.runner")
+local state = require("codetour.state")
 
 local M = {}
 
@@ -21,7 +22,7 @@ local function load_all()
   return items
 end
 
-function M.pick_tour()
+local function pick(prompt, on_select)
   local items = load_all()
   if #items == 0 then
     vim.notify("CodeTour: tours_dir 下没有 .tour 文件", vim.log.levels.INFO)
@@ -36,26 +37,42 @@ function M.pick_tour()
       confirm = function(picker, item)
         picker:close()
         if item then
-          runner.start(item.tour)
+          on_select(item.tour)
         end
       end,
     })
     return
   end
   vim.ui.select(items, {
-    prompt = "CodeTour",
+    prompt = prompt,
     format_item = function(it)
       return it.text
     end,
   }, function(choice)
     if choice then
-      runner.start(choice.tour)
+      on_select(choice.tour)
     end
   end)
 end
 
+function M.pick_tour()
+  pick("CodeTour", function(tour)
+    runner.start(tour)
+  end)
+end
+
+function M.pick_tour_for_resume()
+  pick("Resume tour", function(tour)
+    state.set_active_tour(tour)
+    vim.notify(string.format(
+      "CodeTour: 已激活 [%s] (%d steps)  现在用 :CodeTourAddStep 追加",
+      tour.title,
+      #tour.steps
+    ))
+  end)
+end
+
 function M.pick_step()
-  local state = require("codetour.state")
   local tour = state.active_tour()
   if not tour then
     return M.pick_tour()

@@ -61,6 +61,10 @@ function M.register()
     vim.fn.mkdir(dir, "p")
     vim.cmd("edit " .. vim.fn.fnameescape(dir))
   end, { desc = "打开 tours 目录（用于跨设备迁移时手动改 projectRoot）" })
+
+  cmd("CodeTourResume", function()
+    require("codetour.picker").pick_tour_for_resume()
+  end, { desc = "选一个已有 tour 激活，准备继续追加 step" })
 end
 
 return M

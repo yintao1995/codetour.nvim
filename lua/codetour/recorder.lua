@@ -59,6 +59,12 @@ function M.add_step(opts)
   end
   table.insert(tour.steps, step)
   loader.save(tour)
+  pcall(function()
+    local title = vim.fn.getqflist({ title = 1 }).title or ""
+    if title == "CodeTour: " .. tour.title then
+      require("codetour.runner").populate_quickfix(tour)
+    end
+  end)
   return step
 end
 
