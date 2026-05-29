@@ -104,7 +104,7 @@ local function tour_to_items(tour)
   return items
 end
 
-local function items_to_lines(items, start_idx, end_idx)
+local function compute_column_widths(items)
   local marker_section_w, fileline_w = 0, 0
   for _, it in ipairs(items) do
     local ud = it.user_data
@@ -114,8 +114,11 @@ local function items_to_lines(items, start_idx, end_idx)
       fileline_w = math.max(fileline_w, vim.fn.strdisplaywidth(ud.fileline or ""))
     end
   end
-  marker_section_w = marker_section_w + 4
-  fileline_w = fileline_w + 4
+  return marker_section_w + 4, fileline_w + 4
+end
+
+local function items_to_lines(items, start_idx, end_idx)
+  local marker_section_w, fileline_w = compute_column_widths(items)
 
   local lines = {}
   for idx = start_idx, end_idx do
@@ -134,9 +137,49 @@ local function items_to_lines(items, start_idx, end_idx)
   return lines
 end
 
+local HL_NS = vim.api.nvim_create_namespace("codetour_qf_hl")
+
+function M.apply_highlights_to_buf(bufnr, items)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  vim.api.nvim_buf_clear_namespace(bufnr, HL_NS, 0, -1)
+
+  local marker_section_w, fileline_w = compute_column_widths(items)
+
+  for line_idx, item in ipairs(items) do
+    local ud = item.user_data or {}
+    local row = line_idx - 1
+
+    if ud.kind == "ruler" then
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, HL_NS, "CodeTourRuler", row, 0, -1)
+    elseif ud.kind == "step" then
+      local section = prefix_of(ud.depth) .. (ud.marker or "")
+      local marker_block_byte = #section + (marker_section_w - vim.fn.strdisplaywidth(section))
+      local fileline = ud.fileline or ""
+      local fileline_block_byte_end = marker_block_byte + #fileline + (fileline_w - vim.fn.strdisplaywidth(fileline))
+
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, HL_NS, "CodeTourTree", row, 0, marker_block_byte)
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, HL_NS, "CodeTourDesc", row, fileline_block_byte_end, -1)
+    end
+  end
+end
+
+function M.apply_highlights(bufnr)
+  local qf = vim.fn.getqflist({ title = 1, items = 1 })
+  if not (qf.title and qf.title:sub(1, #QF_TITLE_PREFIX) == QF_TITLE_PREFIX) then
+    return
+  end
+  M.apply_highlights_to_buf(bufnr, qf.items)
+end
+
 function M.render_tour_lines(tour)
   local items = tour_to_items(tour)
   return items_to_lines(items, 1, #items)
+end
+
+function M.tour_items(tour)
+  return tour_to_items(tour)
 end
 
 function M.populate_quickfix(tour)

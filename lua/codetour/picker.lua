@@ -42,8 +42,18 @@ local function pick(prompt, on_select)
           return
         end
         ctx.preview:set_title(tour.title .. "  (" .. tour.projectRoot .. ")")
-        local lines = require("codetour.runner").render_tour_lines(tour)
+        local r = require("codetour.runner")
+        local items = r.tour_items(tour)
+        local lines = {}
+        for i, it in ipairs(items) do
+          local rendered = r.render_tour_lines(tour)[i]
+          lines[i] = rendered or it.text or ""
+        end
         ctx.preview:set_lines(lines)
+        local buf = ctx.preview.buf or (ctx.preview.win and ctx.preview.win.buf)
+        if buf then
+          r.apply_highlights_to_buf(buf, items)
+        end
       end,
       confirm = function(picker, item)
         picker:close()
