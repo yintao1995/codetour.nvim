@@ -5,6 +5,41 @@ local loader = require("codetour.loader")
 
 local M = {}
 
+local _global_keymaps_installed = false
+local _saved_keymaps = {}
+
+local function install_global_keymaps()
+  if _global_keymaps_installed then
+    return
+  end
+  _saved_keymaps = {}
+  for _, lhs in ipairs({ "n", "p", "q" }) do
+    local existing = vim.fn.maparg(lhs, "n", false, true)
+    if existing and not vim.tbl_isempty(existing) then
+      _saved_keymaps[lhs] = existing
+    end
+  end
+  vim.keymap.set("n", "n", function() M.next() end, { desc = "CodeTour: next step" })
+  vim.keymap.set("n", "p", function() M.prev() end, { desc = "CodeTour: prev step" })
+  vim.keymap.set("n", "q", function() M.end_tour() end, { desc = "CodeTour: end tour" })
+  _global_keymaps_installed = true
+end
+
+local function uninstall_global_keymaps()
+  if not _global_keymaps_installed then
+    return
+  end
+  for _, lhs in ipairs({ "n", "p", "q" }) do
+    pcall(vim.keymap.del, "n", lhs)
+    local saved = _saved_keymaps[lhs]
+    if saved and saved.rhs then
+      pcall(vim.fn.mapset, "n", false, saved)
+    end
+  end
+  _saved_keymaps = {}
+  _global_keymaps_installed = false
+end
+
 local function focus_non_float()
   local cur = vim.api.nvim_get_current_win()
   local cfg = vim.api.nvim_win_get_config(cur)
@@ -62,6 +97,7 @@ end
 
 function M.start(tour)
   state.set_active_tour(tour)
+  install_global_keymaps()
   refresh()
 end
 
@@ -81,6 +117,7 @@ function M.goto_step(n)
 end
 
 function M.end_tour()
+  uninstall_global_keymaps()
   ui.close()
   marks.clear_all()
   state.end_tour()
