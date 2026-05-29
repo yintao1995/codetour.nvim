@@ -94,16 +94,21 @@ function M.qftf(info)
     return nil
   end
 
+  local function prefix_of(depth)
+    return string.rep("│   ", depth or 0) .. "├── "
+  end
+
   local items = qf.items
-  local marker_w, fileline_w = 0, 0
+  local marker_section_w, fileline_w = 0, 0
   for _, it in ipairs(items) do
     local ud = it.user_data
     if ud and ud.kind == "step" then
-      marker_w = math.max(marker_w, vim.fn.strdisplaywidth(ud.marker or ""))
+      local section = prefix_of(ud.depth) .. (ud.marker or "")
+      marker_section_w = math.max(marker_section_w, vim.fn.strdisplaywidth(section))
       fileline_w = math.max(fileline_w, vim.fn.strdisplaywidth(ud.fileline or ""))
     end
   end
-  marker_w = marker_w + 4
+  marker_section_w = marker_section_w + 4
   fileline_w = fileline_w + 4
 
   local lines = {}
@@ -113,9 +118,9 @@ function M.qftf(info)
     if ud.kind == "header" then
       table.insert(lines, it.text or ".")
     elseif ud.kind == "step" then
-      local prefix = string.rep("│   ", ud.depth or 0) .. "├── "
-      local desc = it.text or ""
-      table.insert(lines, prefix .. pad_right(ud.marker or "", marker_w) .. pad_right(ud.fileline or "", fileline_w) .. desc)
+      local section = prefix_of(ud.depth) .. (ud.marker or "")
+      local marker_block = pad_right(section, marker_section_w)
+      table.insert(lines, marker_block .. pad_right(ud.fileline or "", fileline_w) .. (it.text or ""))
     else
       table.insert(lines, it.text or "")
     end

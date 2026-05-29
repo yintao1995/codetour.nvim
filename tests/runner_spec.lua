@@ -76,6 +76,53 @@ describe("codetour.runner (quickfix-driven)", function()
     assert.is_nil(result)
   end)
 
+  it("qftf aligns fileline and description columns across depths", function()
+    runner.populate_quickfix({
+      title = "alignment",
+      projectRoot = PROJECT,
+      _path = vim.fn.tempname() .. ".tour",
+      steps = {
+        { file = "lua/codetour/init.lua", line = 1, title = "short", depth = 0, description = "d1" },
+        { file = "lua/codetour/util.lua", line = 2, title = "muchLonger", depth = 1, description = "d2" },
+        { file = "lua/codetour/state.lua", line = 3, title = "x", depth = 2, description = "d3" },
+      },
+    })
+    local qf = vim.fn.getqflist({ id = 0, items = 1 })
+    local lines = runner.qftf({
+      quickfix = 1,
+      id = vim.fn.getqflist({ id = 0 }).id,
+      start_idx = 1,
+      end_idx = #qf.items,
+    })
+
+    local function display_col_of(line, needle)
+      local b = line:find(needle, 1, true)
+      if not b then return nil end
+      return vim.fn.strdisplaywidth(line:sub(1, b - 1))
+    end
+
+    local cols = {
+      display_col_of(lines[2], "init.lua:"),
+      display_col_of(lines[3], "util.lua:"),
+      display_col_of(lines[4], "state.lua:"),
+    }
+    assert.is_truthy(cols[1])
+    for i = 2, 3 do
+      assert.equals(cols[1], cols[i],
+        string.format("fileline col mismatch line %d: got %s vs %s", i + 1, tostring(cols[i]), tostring(cols[1])))
+    end
+
+    local desc_cols = {
+      display_col_of(lines[2], "d1"),
+      display_col_of(lines[3], "d2"),
+      display_col_of(lines[4], "d3"),
+    }
+    for i = 2, 3 do
+      assert.equals(desc_cols[1], desc_cols[i],
+        string.format("desc col mismatch line %d: got %s vs %s", i + 1, tostring(desc_cols[i]), tostring(desc_cols[1])))
+    end
+  end)
+
   it("start() opens quickfix window", function()
     runner.start(make_tour())
     local has_qf = false
