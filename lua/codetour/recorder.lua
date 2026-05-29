@@ -52,7 +52,7 @@ function M.add_step(opts)
     file = rel,
     line = row,
     description = opts.description or "",
-    depth = 0,
+    depth = opts.depth or 0,
   }
   if opts.title and opts.title ~= "" then
     step.title = opts.title

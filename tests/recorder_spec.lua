@@ -58,6 +58,17 @@ describe("codetour.recorder", function()
     assert.is_nil(refreshed.steps[1].title)
   end)
 
+  it("add_step respects depth option", function()
+    vim.cmd("cd " .. tmp_project)
+    local tour = recorder.new_tour({ title = "T" })
+    local sample = tmp_project .. "/x.lua"
+    vim.fn.writefile({ "a" }, sample)
+    vim.cmd("edit " .. sample)
+    recorder.add_step({ description = "d", depth = 2 })
+    local refreshed = loader.load(tour._path)
+    assert.equals(2, refreshed.steps[1].depth)
+  end)
+
   it("add_step rejects buffer outside projectRoot", function()
     vim.cmd("cd " .. tmp_project)
     recorder.new_tour({ title = "T" })
