@@ -1,6 +1,6 @@
 local runner = require("codetour.runner")
 local state = require("codetour.state")
-local marks = require("codetour.marks")
+local loader = require("codetour.loader")
 
 local PROJECT = vim.fn.getcwd()
 
@@ -11,80 +11,80 @@ local function make_tour()
     _path = vim.fn.tempname() .. ".tour",
     steps = {
       { file = "lua/codetour/init.lua", line = 3, description = "step1" },
-      { contents = "Just text", description = "step2" },
+      { contents = "Just text", title = "note", description = "step2" },
       { file = "lua/codetour/util.lua", line = 1, description = "step3" },
     },
   }
 end
 
-describe("codetour.runner", function()
+describe("codetour.runner (quickfix-driven)", function()
   before_each(function()
     state.reset()
-    marks.clear_all()
+    vim.fn.setqflist({}, "f")
+    pcall(vim.cmd, "cclose")
   end)
 
-  local function code_win()
+  it("populate_quickfix produces one entry per step with correct fields", function()
+    runner.populate_quickfix(make_tour())
+    local qf = vim.fn.getqflist({ items = 1, title = 1 })
+    assert.equals("CodeTour: Test", qf.title)
+    assert.equals(3, #qf.items)
+
+    local i1 = qf.items[1]
+    assert.matches("lua/codetour/init%.lua$", vim.api.nvim_buf_get_name(i1.bufnr))
+    assert.equals(3, i1.lnum)
+    assert.equals("step1", i1.text)
+
+    local i2 = qf.items[2]
+    assert.equals(0, i2.valid)
+    assert.matches("note", i2.text)
+    assert.matches("step2", i2.text)
+
+    local i3 = qf.items[3]
+    assert.matches("lua/codetour/util%.lua$", vim.api.nvim_buf_get_name(i3.bufnr))
+    assert.equals(1, i3.lnum)
+  end)
+
+  it("start() opens quickfix window and jumps to first entry", function()
+    runner.start(make_tour())
+    local has_qf = false
     for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-      if vim.api.nvim_win_get_config(w).relative == "" then
-        return w
+      if vim.bo[vim.api.nvim_win_get_buf(w)].buftype == "quickfix" then
+        has_qf = true
+        break
       end
     end
-  end
-
-  local function code_buf_name()
-    return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(code_win()))
-  end
-
-  it("start() opens projectRoot+file at the right line", function()
-    runner.start(make_tour())
-    assert.equals(1, state.active_step_index())
-    assert.matches("lua/codetour/init%.lua$", code_buf_name())
-    local row = vim.api.nvim_win_get_cursor(code_win())[1]
-    assert.equals(3, row)
+    assert.is_true(has_qf)
+    assert.equals(1, vim.fn.getqflist({ idx = 0 }).idx)
   end)
 
-  it("next() to a content step does NOT change file buffer", function()
+  it("next() advances quickfix idx (skipping invalid content entries)", function()
     runner.start(make_tour())
-    local before = code_buf_name()
     runner.next()
-    assert.equals(2, state.active_step_index())
-    assert.equals(before, code_buf_name())
+    -- step 2 is content-only (valid=0), so cnext jumps directly to step 3
+    assert.equals(3, vim.fn.getqflist({ idx = 0 }).idx)
   end)
 
-  it("next() then next() jumps to util.lua line 1", function()
+  it("prev() decreases quickfix idx", function()
     runner.start(make_tour())
-    runner.next()
-    runner.next()
-    assert.equals(3, state.active_step_index())
-    assert.matches("lua/codetour/util%.lua$", code_buf_name())
-    assert.equals(1, vim.api.nvim_win_get_cursor(code_win())[1])
-  end)
-
-  it("prev() at step 1 stays at step 1", function()
-    runner.start(make_tour())
+    runner.goto_step(3)
     runner.prev()
-    assert.equals(1, state.active_step_index())
+    -- step 2 invalid, prev goes back to 1
+    assert.equals(1, vim.fn.getqflist({ idx = 0 }).idx)
   end)
 
-  it("end_tour() clears state and marks", function()
+  it("goto_step(n) jumps to entry n", function()
+    runner.start(make_tour())
+    runner.goto_step(3)
+    assert.equals(3, vim.fn.getqflist({ idx = 0 }).idx)
+  end)
+
+  it("end_tour() closes quickfix and clears state", function()
     runner.start(make_tour())
     runner.end_tour()
     assert.is_nil(state.active_tour())
-  end)
-
-  it("goto_step(n) jumps directly", function()
-    runner.start(make_tour())
-    runner.goto_step(3)
-    assert.equals(3, state.active_step_index())
-  end)
-
-  it("works regardless of current cwd (uses tour.projectRoot)", function()
-    local original = vim.fn.getcwd()
-    pcall(function()
-      vim.cmd("cd /tmp")
-      runner.start(make_tour())
-      assert.matches("lua/codetour/init%.lua$", code_buf_name())
-    end)
-    vim.cmd("cd " .. original)
+    for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      assert.is_not.equals("quickfix", vim.bo[vim.api.nvim_win_get_buf(w)].buftype)
+    end
   end)
 end)
