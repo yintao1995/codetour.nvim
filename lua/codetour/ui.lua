@@ -39,7 +39,7 @@ local function ensure_win()
   local rows = vim.o.lines
   local width = math.max(40, math.floor(cols * 0.4))
   local height = math.max(8, math.floor(rows * 0.3))
-  _win = vim.api.nvim_open_win(buf, false, {
+  _win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
     anchor = "SE",
     row = rows - 2,
@@ -72,6 +72,7 @@ function M.show(opts)
   local lines = vim.split(opts.body or "", "\n", { plain = true })
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
+  vim.api.nvim_set_current_win(win)
 end
 
 function M.close()

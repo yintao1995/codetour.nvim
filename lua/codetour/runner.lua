@@ -5,7 +5,22 @@ local loader = require("codetour.loader")
 
 local M = {}
 
+local function focus_non_float()
+  local cur = vim.api.nvim_get_current_win()
+  local cfg = vim.api.nvim_win_get_config(cur)
+  if cfg.relative == "" then
+    return
+  end
+  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_get_config(w).relative == "" then
+      vim.api.nvim_set_current_win(w)
+      return
+    end
+  end
+end
+
 local function open_file_step(tour, step)
+  focus_non_float()
   local root = loader.project_root_abs(tour)
   local path = root .. "/" .. step.file
   vim.cmd("edit " .. vim.fn.fnameescape(path))
