@@ -9,6 +9,18 @@ local function basename_of(rel)
   return vim.fs.basename(rel)
 end
 
+local function prefix_of(depth)
+  return string.rep("│   ", depth or 0) .. "├── "
+end
+
+local function pad_right(s, target_w)
+  local w = vim.fn.strdisplaywidth(s)
+  if w >= target_w then
+    return s
+  end
+  return s .. string.rep(" ", target_w - w)
+end
+
 local function step_to_qf_item(root, step)
   if step.file then
     local base = basename_of(step.file)
@@ -57,7 +69,7 @@ local function step_to_qf_item(root, step)
   }
 end
 
-function M.populate_quickfix(tour)
+local function tour_to_items(tour)
   local root = loader.project_root_abs(tour)
   local items = {
     {
@@ -69,36 +81,10 @@ function M.populate_quickfix(tour)
   for _, step in ipairs(tour.steps) do
     table.insert(items, step_to_qf_item(root, step))
   end
-  vim.fn.setqflist({}, " ", {
-    title = QF_TITLE_PREFIX .. tour.title,
-    items = items,
-  })
+  return items
 end
 
-local function pad_right(s, target_w)
-  local w = vim.fn.strdisplaywidth(s)
-  if w >= target_w then
-    return s
-  end
-  return s .. string.rep(" ", target_w - w)
-end
-
-function M.qftf(info)
-  local qf
-  if info.quickfix == 1 then
-    qf = vim.fn.getqflist({ id = info.id, items = 1, title = 1 })
-  else
-    qf = vim.fn.getloclist(info.winid, { id = info.id, items = 1, title = 1 })
-  end
-  if not (qf.title and qf.title:sub(1, #QF_TITLE_PREFIX) == QF_TITLE_PREFIX) then
-    return nil
-  end
-
-  local function prefix_of(depth)
-    return string.rep("│   ", depth or 0) .. "├── "
-  end
-
-  local items = qf.items
+local function items_to_lines(items, start_idx, end_idx)
   local marker_section_w, fileline_w = 0, 0
   for _, it in ipairs(items) do
     local ud = it.user_data
@@ -112,7 +98,7 @@ function M.qftf(info)
   fileline_w = fileline_w + 4
 
   local lines = {}
-  for idx = info.start_idx, info.end_idx do
+  for idx = start_idx, end_idx do
     local it = items[idx] or {}
     local ud = it.user_data or {}
     if ud.kind == "header" then
@@ -126,6 +112,31 @@ function M.qftf(info)
     end
   end
   return lines
+end
+
+function M.render_tour_lines(tour)
+  local items = tour_to_items(tour)
+  return items_to_lines(items, 1, #items)
+end
+
+function M.populate_quickfix(tour)
+  vim.fn.setqflist({}, " ", {
+    title = QF_TITLE_PREFIX .. tour.title,
+    items = tour_to_items(tour),
+  })
+end
+
+function M.qftf(info)
+  local qf
+  if info.quickfix == 1 then
+    qf = vim.fn.getqflist({ id = info.id, items = 1, title = 1 })
+  else
+    qf = vim.fn.getloclist(info.winid, { id = info.id, items = 1, title = 1 })
+  end
+  if not (qf.title and qf.title:sub(1, #QF_TITLE_PREFIX) == QF_TITLE_PREFIX) then
+    return nil
+  end
+  return items_to_lines(qf.items, info.start_idx, info.end_idx)
 end
 
 function M.start(tour)

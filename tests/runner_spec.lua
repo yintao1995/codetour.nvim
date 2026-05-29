@@ -149,4 +149,15 @@ describe("codetour.runner (quickfix-driven)", function()
       assert.is_not.equals("quickfix", vim.bo[vim.api.nvim_win_get_buf(w)].buftype)
     end
   end)
+
+  it("render_tour_lines returns same shape as qftf without touching qflist", function()
+    -- capture qflist state before
+    local before_id = vim.fn.getqflist({ id = 0 }).id
+    local lines = runner.render_tour_lines(make_tour())
+    -- qflist should be unchanged
+    assert.equals(before_id, vim.fn.getqflist({ id = 0 }).id)
+    assert.equals(5, #lines)
+    assert.equals("demo", lines[1])
+    assert.matches("^├── AAAA1%s+init%.lua:3%s+step1", lines[2])
+  end)
 end)

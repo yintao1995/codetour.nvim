@@ -34,6 +34,17 @@ local function pick(prompt, on_select)
       source = "codetour_tours",
       items = items,
       format = "text",
+      preview = function(ctx)
+        local tour = ctx.item and ctx.item.tour
+        ctx.preview:reset()
+        if not tour then
+          ctx.preview:notify("no tour data", "error")
+          return
+        end
+        ctx.preview:set_title(tour.title .. "  (" .. tour.projectRoot .. ")")
+        local lines = require("codetour.runner").render_tour_lines(tour)
+        ctx.preview:set_lines(lines)
+      end,
       confirm = function(picker, item)
         picker:close()
         if item then
