@@ -85,6 +85,7 @@ end
 function M.pick_tour_for_resume()
   pick("Resume tour", function(tour)
     state.set_active_tour(tour)
+    runner.open_for_recording(tour)
     vim.notify(string.format(
       "CodeTour: 已激活 [%s] (%d steps)  现在用 :CodeTourAddStep 追加",
       tour.title,

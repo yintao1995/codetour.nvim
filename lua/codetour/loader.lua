@@ -55,7 +55,11 @@ end
 function M.save(tour)
   assert(tour._path, "tour._path is required for save()")
   local copy = vim.deepcopy(tour)
-  copy._path = nil
+  for k in pairs(copy) do
+    if type(k) == "string" and k:sub(1, 1) == "_" then
+      copy[k] = nil
+    end
+  end
   util.write_json(tour._path, copy)
 end
 

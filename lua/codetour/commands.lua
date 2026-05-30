@@ -22,6 +22,7 @@ function M.register()
       return
     end
     local tour = require("codetour.recorder").new_tour({ title = title })
+    require("codetour.runner").open_for_recording(tour)
     vim.notify(string.format("CodeTour: 已创建 %s\nprojectRoot=%s", tour._path, tour.projectRoot))
   end, { nargs = "?", desc = "新建 tour（projectRoot 自动取自当前 cwd）" })
 

@@ -147,12 +147,27 @@ function M.apply_highlights_to_buf(bufnr, items)
 
   local marker_section_w, fileline_w = compute_column_widths(items)
 
+  local hint
+  do
+    local ok, codetour = pcall(require, "codetour")
+    if ok and codetour.format_qf_hint then
+      hint = codetour.format_qf_hint()
+    end
+  end
+
   for line_idx, item in ipairs(items) do
     local ud = item.user_data or {}
     local row = line_idx - 1
 
     if ud.kind == "ruler" then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, HL_NS, "CodeTourRuler", row, 0, -1)
+      if hint and hint ~= "" then
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, HL_NS, row, 0, {
+          virt_text = { { hint, "CodeTourHint" } },
+          virt_text_pos = "right_align",
+          hl_mode = "combine",
+        })
+      end
     elseif ud.kind == "step" then
       local section = prefix_of(ud.depth) .. (ud.marker or "")
       local marker_block_byte = #section + (marker_section_w - vim.fn.strdisplaywidth(section))
@@ -189,6 +204,57 @@ function M.populate_quickfix(tour)
   })
 end
 
+local function find_codetour_qf_win()
+  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local buf = vim.api.nvim_win_get_buf(w)
+    if vim.bo[buf].buftype == "quickfix" then
+      local qf = vim.fn.getqflist({ title = 1 })
+      if qf.title and qf.title:sub(1, #QF_TITLE_PREFIX) == QF_TITLE_PREFIX then
+        return w, buf
+      end
+    end
+  end
+  return nil, nil
+end
+
+-- 原地刷新当前 CodeTour 的 quickfix list（不开新 history entry），可选择跳到 new_qf_lnum
+-- 不传 new_qf_lnum 时：若 qf 窗口存在则保留其当前光标，否则不动
+function M.refresh_quickfix(tour, new_qf_lnum)
+  local cur = vim.fn.getqflist({ id = 0, title = 1 })
+  local is_codetour = cur.title and cur.title:sub(1, #QF_TITLE_PREFIX) == QF_TITLE_PREFIX
+  local items = tour_to_items(tour)
+  if is_codetour and cur.id and cur.id ~= 0 then
+    vim.fn.setqflist({}, "r", {
+      id = cur.id,
+      title = QF_TITLE_PREFIX .. tour.title,
+      items = items,
+    })
+  else
+    vim.fn.setqflist({}, " ", {
+      title = QF_TITLE_PREFIX .. tour.title,
+      items = items,
+    })
+  end
+  local win, buf = find_codetour_qf_win()
+  if buf then
+    M.apply_highlights_to_buf(buf, items)
+  end
+  if not new_qf_lnum and win then
+    new_qf_lnum = vim.api.nvim_win_get_cursor(win)[1]
+  end
+  if new_qf_lnum and win then
+    local last = vim.api.nvim_buf_line_count(buf)
+    new_qf_lnum = math.max(1, math.min(last, new_qf_lnum))
+    pcall(vim.api.nvim_win_set_cursor, win, { new_qf_lnum, 0 })
+    -- 如果指向 step entry，同步 quickfix 当前 idx，让 :cc / :cn 起点正确
+    local item = items[new_qf_lnum]
+    if item and item.user_data and item.user_data.kind == "step" then
+      local id = vim.fn.getqflist({ id = 0 }).id
+      pcall(vim.fn.setqflist, {}, "a", { id = id, idx = new_qf_lnum })
+    end
+  end
+end
+
 function M.qftf(info)
   local qf
   if info.quickfix == 1 then
@@ -207,6 +273,16 @@ function M.start(tour)
   M.populate_quickfix(tour)
   vim.cmd("botright copen")
   pcall(vim.cmd, "cfirst")
+end
+
+-- 录制场景：打开 quickfix 但保持焦点在原编辑窗口，方便用户继续选行 / 加 step
+function M.open_for_recording(tour)
+  local prev_win = vim.api.nvim_get_current_win()
+  M.populate_quickfix(tour)
+  vim.cmd("botright copen")
+  if vim.api.nvim_win_is_valid(prev_win) then
+    pcall(vim.api.nvim_set_current_win, prev_win)
+  end
 end
 
 function M.end_tour()

@@ -1,0 +1,265 @@
+local editor = require("codetour.editor")
+local runner = require("codetour.runner")
+local loader = require("codetour.loader")
+local state = require("codetour.state")
+
+local PROJECT = vim.fn.getcwd()
+
+local function make_tour()
+  local tour = {
+    title = "edit-demo",
+    projectRoot = PROJECT,
+    _path = vim.fn.tempname() .. ".tour",
+    steps = {
+      { file = "lua/codetour/init.lua", line = 1, title = "A", description = "d1", depth = 0 },
+      { file = "lua/codetour/util.lua", line = 2, title = "B", description = "d2", depth = 1 },
+      { file = "lua/codetour/runner.lua", line = 3, title = "C", description = "d3", depth = 1 },
+      { file = "lua/codetour/state.lua", line = 4, title = "D", description = "d4", depth = 0 },
+    },
+  }
+  -- 必须先落盘以满足 loader.load 校验
+  loader.save(tour)
+  return tour
+end
+
+local function step_qf_lnum(idx)
+  return idx + editor._STEP_OFFSET
+end
+
+describe("codetour.editor", function()
+  before_each(function()
+    state.reset()
+    vim.fn.setqflist({}, "f")
+    pcall(vim.cmd, "cclose")
+  end)
+
+  describe("move_step_up", function()
+    it("swaps step with previous one and saves to disk", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+
+      editor.move_step_up(step_qf_lnum(2)) -- 移动 B 到第 1 位
+
+      assert.equals("B", tour.steps[1].title)
+      assert.equals("A", tour.steps[2].title)
+      local on_disk = loader.load(tour._path)
+      assert.equals("B", on_disk.steps[1].title)
+      assert.equals("A", on_disk.steps[2].title)
+    end)
+
+    it("is a no-op for first step", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.move_step_up(step_qf_lnum(1))
+      assert.equals("A", tour.steps[1].title)
+    end)
+
+    it("refreshes quickfix in place (does not grow history)", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      local before = vim.fn.getqflist({ nr = "$" }).nr
+      editor.move_step_up(step_qf_lnum(2))
+      local after = vim.fn.getqflist({ nr = "$" }).nr
+      assert.equals(before, after)
+    end)
+
+    it("reflected in qftf output after refresh", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.move_step_up(step_qf_lnum(2))
+      local id = vim.fn.getqflist({ id = 0 }).id
+      local items = vim.fn.getqflist({ items = 1 }).items
+      local lines = runner.qftf({ quickfix = 1, id = id, start_idx = 1, end_idx = #items })
+      -- B 原本 depth=1，交换顺序后 depth 跟 step 走，仍然缩进
+      assert.matches("^│   ├── B%s+util%.lua:2", lines[3])
+      assert.matches("^├── A%s+init%.lua:1", lines[4])
+    end)
+  end)
+
+  describe("move_step_down", function()
+    it("swaps step with next one", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.move_step_down(step_qf_lnum(1))
+      assert.equals("B", tour.steps[1].title)
+      assert.equals("A", tour.steps[2].title)
+    end)
+
+    it("is a no-op for last step", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.move_step_down(step_qf_lnum(#tour.steps))
+      assert.equals("D", tour.steps[#tour.steps].title)
+    end)
+  end)
+
+  describe("indent_step", function()
+    it("increases depth by 1 without upper bound", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.indent_step(step_qf_lnum(1))
+      assert.equals(1, tour.steps[1].depth)
+      editor.indent_step(step_qf_lnum(1))
+      assert.equals(2, tour.steps[1].depth)
+      assert.equals(2, loader.load(tour._path).steps[1].depth)
+    end)
+  end)
+
+  describe("outdent_step", function()
+    it("decreases depth by 1 and clamps at 0", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.outdent_step(step_qf_lnum(2)) -- depth 1 -> 0
+      assert.equals(0, tour.steps[2].depth)
+      editor.outdent_step(step_qf_lnum(2)) -- already 0, stays
+      assert.equals(0, tour.steps[2].depth)
+    end)
+  end)
+
+  describe("delete_step", function()
+    it("removes the step and persists", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.delete_step(step_qf_lnum(2))
+      assert.equals(3, #tour.steps)
+      assert.equals("A", tour.steps[1].title)
+      assert.equals("C", tour.steps[2].title)
+      local on_disk = loader.load(tour._path)
+      assert.equals(3, #on_disk.steps)
+    end)
+  end)
+
+  describe("no active tour", function()
+    it("is a no-op when there is no active tour", function()
+      -- 不设置 active tour，调用应该静默返回不抛
+      assert.has_no.errors(function()
+        editor.move_step_up(3)
+        editor.move_step_down(3)
+        editor.indent_step(3)
+        editor.outdent_step(3)
+        editor.delete_step(3)
+        editor.undo(3)
+        editor.redo(3)
+      end)
+    end)
+  end)
+
+  describe("undo / redo", function()
+    it("undo restores previous state after move", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.move_step_up(step_qf_lnum(2))
+      assert.equals("B", tour.steps[1].title)
+      editor.undo(step_qf_lnum(1))
+      assert.equals("A", tour.steps[1].title)
+      assert.equals("B", tour.steps[2].title)
+      assert.equals("A", loader.load(tour._path).steps[1].title)
+    end)
+
+    it("undo restores deleted step", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.delete_step(step_qf_lnum(2))
+      assert.equals(3, #tour.steps)
+      editor.undo(step_qf_lnum(2))
+      assert.equals(4, #tour.steps)
+      assert.equals("B", tour.steps[2].title)
+      assert.equals(4, #loader.load(tour._path).steps)
+    end)
+
+    it("redo replays the undone action", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.indent_step(step_qf_lnum(1))
+      assert.equals(1, tour.steps[1].depth)
+      editor.undo(step_qf_lnum(1))
+      assert.equals(0, tour.steps[1].depth)
+      editor.redo(step_qf_lnum(1))
+      assert.equals(1, tour.steps[1].depth)
+      assert.equals(1, loader.load(tour._path).steps[1].depth)
+    end)
+
+    it("new action clears redo stack", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.indent_step(step_qf_lnum(1))
+      editor.undo(step_qf_lnum(1))
+      assert.equals(1, #tour._future)
+      editor.indent_step(step_qf_lnum(2)) -- 新动作
+      assert.equals(0, #tour._future)
+    end)
+
+    it("undo is a no-op when history is empty", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.undo(step_qf_lnum(1))
+      assert.equals("A", tour.steps[1].title)
+    end)
+
+    it("redo is a no-op when future is empty", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.move_step_down(step_qf_lnum(1))
+      assert.equals("B", tour.steps[1].title)
+      editor.redo(step_qf_lnum(1))
+      assert.equals("B", tour.steps[1].title)
+    end)
+
+    it("can undo multiple times in a row", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.indent_step(step_qf_lnum(1))
+      editor.indent_step(step_qf_lnum(1))
+      editor.indent_step(step_qf_lnum(1))
+      assert.equals(3, tour.steps[1].depth)
+      editor.undo(step_qf_lnum(1))
+      editor.undo(step_qf_lnum(1))
+      editor.undo(step_qf_lnum(1))
+      assert.equals(0, tour.steps[1].depth)
+    end)
+
+    it("history does not leak into saved .tour file", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      runner.populate_quickfix(tour)
+      editor.move_step_up(step_qf_lnum(2))
+      local raw = table.concat(vim.fn.readfile(tour._path), "\n")
+      assert.is_nil(raw:find("_history"))
+      assert.is_nil(raw:find("_future"))
+      assert.is_nil(raw:find("_path"))
+    end)
+  end)
+
+  describe("edit_tour_file", function()
+    it("opens the .tour file in current window when no other window exists", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      vim.cmd("only")
+      editor.edit_tour_file()
+      local bufname = vim.api.nvim_buf_get_name(0)
+      assert.equals(vim.fn.resolve(tour._path), vim.fn.resolve(bufname))
+    end)
+
+    it("is a no-op without active tour", function()
+      assert.has_no.errors(function()
+        editor.edit_tour_file()
+      end)
+    end)
+  end)
+end)
