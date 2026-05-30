@@ -61,7 +61,7 @@ my-tour
 
 ```lua
 {
-  "yintao/codetour.nvim",
+  "yintao1995/codetour.nvim",
   cmd = {
     "CodeTourStart", "CodeTourEnd", "CodeTourNew",
     "CodeTourAddStep", "CodeTourOpenDir", "CodeTourResume",
@@ -82,7 +82,7 @@ my-tour
 
 ```lua
 use {
-  "yintao/codetour.nvim",
+  "yintao1995/codetour.nvim",
   config = function() require("codetour").setup() end,
 }
 ```
