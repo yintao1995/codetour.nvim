@@ -262,4 +262,137 @@ describe("codetour.editor", function()
       end)
     end)
   end)
+
+  describe("quickfix view preservation", function()
+    -- 构造一个超过窗口高度的 tour, 滚到中间, 验证操作后 topline 不被重置
+    local function make_long_tour(n)
+      local tour = {
+        title = "long-tour",
+        projectRoot = PROJECT,
+        _path = vim.fn.tempname() .. ".tour",
+        steps = {},
+      }
+      for i = 1, n do
+        table.insert(tour.steps, {
+          file = "lua/codetour/init.lua",
+          line = i,
+          title = "M" .. i,
+          description = "step " .. i,
+          depth = 0,
+        })
+      end
+      loader.save(tour)
+      return tour
+    end
+
+    -- 打开 qf window, 设到指定窗口高度, 滚动到指定 topline; 返回 qf window id
+    local function open_qf_scrolled(tour, win_height, topline_target)
+      runner.populate_quickfix(tour)
+      vim.cmd("botright copen " .. win_height)
+      local win
+      for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        local b = vim.api.nvim_win_get_buf(w)
+        if vim.bo[b].buftype == "quickfix" then
+          win = w
+          break
+        end
+      end
+      assert(win, "qf window not found after copen")
+      vim.api.nvim_win_call(win, function()
+        vim.fn.winrestview({ topline = topline_target, lnum = topline_target + 2 })
+      end)
+      return win
+    end
+
+    it("add_step (refresh_quickfix 不传 lnum) 保留 topline + cursor", function()
+      local tour = make_long_tour(30)
+      state.set_active_tour(tour)
+      local win = open_qf_scrolled(tour, 5, 15)
+      local before = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+
+      -- 模拟 recorder.add_step 的后半段: 追加 step + refresh (不传 lnum)
+      table.insert(tour.steps, {
+        file = "lua/codetour/init.lua",
+        line = 100,
+        title = "NEW",
+        description = "new step",
+        depth = 0,
+      })
+      loader.save(tour)
+      runner.refresh_quickfix(tour)
+
+      local after = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+      assert.equals(before.topline, after.topline)
+      assert.equals(before.lnum, after.lnum)
+    end)
+
+    it("move_step_up 保留 topline (cursor 跟随到上一行)", function()
+      local tour = make_long_tour(30)
+      state.set_active_tour(tour)
+      local win = open_qf_scrolled(tour, 5, 15)
+      local before = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+
+      -- 移动 qf 第 17 行的 step (即第 15 个 step) 向上
+      editor.move_step_up(17)
+
+      local after = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+      assert.equals(before.topline, after.topline, "topline should not change after move_up")
+      assert.equals(16, after.lnum, "cursor should follow step to new position")
+    end)
+
+    it("move_step_down 保留 topline (cursor 跟随到下一行)", function()
+      local tour = make_long_tour(30)
+      state.set_active_tour(tour)
+      local win = open_qf_scrolled(tour, 5, 15)
+      local before = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+
+      editor.move_step_down(17)
+
+      local after = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+      assert.equals(before.topline, after.topline)
+      assert.equals(18, after.lnum)
+    end)
+
+    it("indent_step 保留 topline 和 cursor (depth 变但位置不动)", function()
+      local tour = make_long_tour(30)
+      state.set_active_tour(tour)
+      local win = open_qf_scrolled(tour, 5, 15)
+      local before = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+
+      editor.indent_step(17)
+
+      local after = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+      assert.equals(before.topline, after.topline)
+      assert.equals(17, after.lnum)
+    end)
+
+    it("outdent_step 保留 topline 和 cursor", function()
+      local tour = make_long_tour(30)
+      -- 把所有 step 的 depth 设为 1, 这样 outdent 才有效果
+      for _, s in ipairs(tour.steps) do s.depth = 1 end
+      loader.save(tour)
+      state.set_active_tour(tour)
+      local win = open_qf_scrolled(tour, 5, 15)
+      local before = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+
+      editor.outdent_step(17)
+
+      local after = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+      assert.equals(before.topline, after.topline)
+      assert.equals(17, after.lnum)
+    end)
+
+    it("delete_step 保留 topline (cursor 留在原 idx 对应的下一个 step)", function()
+      local tour = make_long_tour(30)
+      state.set_active_tour(tour)
+      local win = open_qf_scrolled(tour, 5, 15)
+      local before = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+
+      editor.delete_step(17)
+
+      local after = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+      assert.equals(before.topline, after.topline)
+      assert.equals(17, after.lnum)
+    end)
+  end)
 end)

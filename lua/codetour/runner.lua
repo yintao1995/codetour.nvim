@@ -221,13 +221,14 @@ local function find_codetour_qf_win()
 end
 
 -- 原地刷新当前 CodeTour 的 quickfix list（不开新 history entry）
--- 传 new_qf_lnum: 光标定位到该行 (move/indent/delete 等编辑操作)
--- 不传 new_qf_lnum: 完整保留 qf window 的 view (topline + cursor + leftcol), 不打扰用户视图
+-- 不论传不传 new_qf_lnum, 都保留 qf window 的 topline / leftcol, 避免视图跳动:
+--   传 new_qf_lnum: cursor 移动到该行 (move/indent/delete 等编辑操作), topline 保持原状
+--   不传 new_qf_lnum: cursor 也保留 (add_step 等纯刷新场景, 完整恢复 view)
 function M.refresh_quickfix(tour, new_qf_lnum)
   -- 先找 qf window 并保存 view (在 setqflist 之前, 否则 view 已被重置)
   local win, buf = find_codetour_qf_win()
   local saved_view
-  if not new_qf_lnum and win then
+  if win then
     pcall(vim.api.nvim_win_call, win, function()
       saved_view = vim.fn.winsaveview()
     end)
@@ -264,14 +265,22 @@ function M.refresh_quickfix(tour, new_qf_lnum)
     M.apply_highlights_to_buf(buf, items)
   end
 
-  -- 恢复 view 或显式 set cursor; 用 schedule 兜底覆盖异步事件触发的重置
+  -- 恢复视图; 用 schedule 兜底覆盖异步事件触发的重置
   local function apply()
     if not (win and vim.api.nvim_win_is_valid(win)) then return end
     pcall(vim.api.nvim_win_call, win, function()
-      if saved_view then
-        pcall(vim.fn.winrestview, saved_view)
-      elseif new_qf_lnum then
+      if new_qf_lnum then
+        -- 编辑场景: cursor 跳到目标 step, 但 topline / leftcol 保持原状不滚视图
         pcall(vim.api.nvim_win_set_cursor, 0, { new_qf_lnum, 0 })
+        if saved_view then
+          pcall(vim.fn.winrestview, {
+            topline = saved_view.topline,
+            leftcol = saved_view.leftcol,
+          })
+        end
+      elseif saved_view then
+        -- 纯刷新场景: 完整恢复 view
+        pcall(vim.fn.winrestview, saved_view)
       end
     end)
   end
