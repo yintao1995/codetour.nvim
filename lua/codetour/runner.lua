@@ -220,42 +220,63 @@ local function find_codetour_qf_win()
   return nil, nil
 end
 
--- 原地刷新当前 CodeTour 的 quickfix list（不开新 history entry），可选择跳到 new_qf_lnum
--- 不传 new_qf_lnum 时：若 qf 窗口存在则保留其当前光标，否则不动
+-- 原地刷新当前 CodeTour 的 quickfix list（不开新 history entry）
+-- 传 new_qf_lnum: 光标定位到该行 (move/indent/delete 等编辑操作)
+-- 不传 new_qf_lnum: 完整保留 qf window 的 view (topline + cursor + leftcol), 不打扰用户视图
 function M.refresh_quickfix(tour, new_qf_lnum)
+  -- 先找 qf window 并保存 view (在 setqflist 之前, 否则 view 已被重置)
+  local win, buf = find_codetour_qf_win()
+  local saved_view
+  if not new_qf_lnum and win then
+    pcall(vim.api.nvim_win_call, win, function()
+      saved_view = vim.fn.winsaveview()
+    end)
+  end
+
   local cur = vim.fn.getqflist({ id = 0, title = 1 })
   local is_codetour = cur.title and cur.title:sub(1, #QF_TITLE_PREFIX) == QF_TITLE_PREFIX
   local items = tour_to_items(tour)
-  if is_codetour and cur.id and cur.id ~= 0 then
-    vim.fn.setqflist({}, "r", {
-      id = cur.id,
-      title = QF_TITLE_PREFIX .. tour.title,
-      items = items,
-    })
-  else
-    vim.fn.setqflist({}, " ", {
-      title = QF_TITLE_PREFIX .. tour.title,
-      items = items,
-    })
+
+  if new_qf_lnum then
+    new_qf_lnum = math.max(1, math.min(#items, new_qf_lnum))
   end
-  local win, buf = find_codetour_qf_win()
+
+  -- setqflist 'r' 会把 cursor 重置到 idx 对应行, 把 idx 一并塞进同一次调用避免抖动
+  local set_opts = {
+    title = QF_TITLE_PREFIX .. tour.title,
+    items = items,
+  }
+  if new_qf_lnum then
+    set_opts.idx = new_qf_lnum
+  end
+  if is_codetour and cur.id and cur.id ~= 0 then
+    set_opts.id = cur.id
+    vim.fn.setqflist({}, "r", set_opts)
+  else
+    vim.fn.setqflist({}, " ", set_opts)
+  end
+
+  -- 找一次 qf window (qf window 可能在 setqflist 之前不存在但之后由其他逻辑打开)
+  if not win then
+    win, buf = find_codetour_qf_win()
+  end
   if buf then
     M.apply_highlights_to_buf(buf, items)
   end
-  if not new_qf_lnum and win then
-    new_qf_lnum = vim.api.nvim_win_get_cursor(win)[1]
+
+  -- 恢复 view 或显式 set cursor; 用 schedule 兜底覆盖异步事件触发的重置
+  local function apply()
+    if not (win and vim.api.nvim_win_is_valid(win)) then return end
+    pcall(vim.api.nvim_win_call, win, function()
+      if saved_view then
+        pcall(vim.fn.winrestview, saved_view)
+      elseif new_qf_lnum then
+        pcall(vim.api.nvim_win_set_cursor, 0, { new_qf_lnum, 0 })
+      end
+    end)
   end
-  if new_qf_lnum and win then
-    local last = vim.api.nvim_buf_line_count(buf)
-    new_qf_lnum = math.max(1, math.min(last, new_qf_lnum))
-    pcall(vim.api.nvim_win_set_cursor, win, { new_qf_lnum, 0 })
-    -- 如果指向 step entry，同步 quickfix 当前 idx，让 :cc / :cn 起点正确
-    local item = items[new_qf_lnum]
-    if item and item.user_data and item.user_data.kind == "step" then
-      local id = vim.fn.getqflist({ id = 0 }).id
-      pcall(vim.fn.setqflist, {}, "a", { id = id, idx = new_qf_lnum })
-    end
-  end
+  apply()
+  vim.schedule(apply)
 end
 
 function M.qftf(info)

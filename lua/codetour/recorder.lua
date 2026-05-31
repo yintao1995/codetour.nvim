@@ -62,7 +62,8 @@ function M.add_step(opts)
   pcall(function()
     local title = vim.fn.getqflist({ title = 1 }).title or ""
     if title == "CodeTour: " .. tour.title then
-      require("codetour.runner").populate_quickfix(tour)
+      -- 不传 lnum, refresh_quickfix 会用 winsaveview/winrestview 完整保留 view (topline + cursor)
+      require("codetour.runner").refresh_quickfix(tour)
     end
   end)
   return step
