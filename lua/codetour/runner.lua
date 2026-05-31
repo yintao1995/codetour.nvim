@@ -181,6 +181,9 @@ function M.apply_highlights_to_buf(bufnr, items)
 end
 
 function M.apply_highlights(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then return end
+  -- 不管当前 list 是不是 CodeTour 都先清理一遍 namespace, 避免切换到其他 quickfix list 时残留
+  vim.api.nvim_buf_clear_namespace(bufnr, HL_NS, 0, -1)
   local qf = vim.fn.getqflist({ title = 1, items = 1 })
   if not (qf.title and qf.title:sub(1, #QF_TITLE_PREFIX) == QF_TITLE_PREFIX) then
     return

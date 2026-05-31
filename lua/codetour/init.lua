@@ -102,6 +102,26 @@ local function bind_qf_keymaps(bufnr)
   map(km.edit_tour, function() editor.edit_tour_file() end, "CodeTour: edit .tour file")
 end
 
+local function unbind_qf_keymaps(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then return end
+  local km = M.config.qf_keymaps or {}
+  for _, lhs in pairs(km) do
+    if type(lhs) == "string" and lhs ~= "" then
+      pcall(vim.keymap.del, "n", lhs, { buffer = bufnr })
+    end
+  end
+end
+
+-- 每次 qf buffer 显示或 list 变化时调用: 先清空我们留下的 keymap 和 extmark,
+-- 再根据当前 list 的 title 决定是否重新装载 CodeTour 的高亮和键位
+local function refresh_qf_buffer(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then return end
+  if vim.bo[bufnr].buftype ~= "quickfix" then return end
+  unbind_qf_keymaps(bufnr)
+  require("codetour.runner").apply_highlights(bufnr) -- 内部先清 namespace, 再按需 apply
+  bind_qf_keymaps(bufnr) -- 内部判断 title, 非 CodeTour 不绑
+end
+
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
   vim.fn.mkdir(M.config.tours_dir, "p")
@@ -120,9 +140,28 @@ function M.setup(opts)
     pattern = "qf",
     group = grp,
     callback = function(args)
+      vim.schedule(function() refresh_qf_buffer(args.buf) end)
+    end,
+  })
+  -- 切换其他 quickfix list (vimgrep / setqflist 等) 时 qf buffer 复用, FileType 不会再触发,
+  -- 用 BufWinEnter 覆盖窗口再次显示场景; 用 QuickFixCmdPost 覆盖 list 内容被外部命令换掉的场景
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    group = grp,
+    callback = function(args)
+      if vim.bo[args.buf].buftype ~= "quickfix" then return end
+      vim.schedule(function() refresh_qf_buffer(args.buf) end)
+    end,
+  })
+  vim.api.nvim_create_autocmd("QuickFixCmdPost", {
+    group = grp,
+    callback = function()
       vim.schedule(function()
-        require("codetour.runner").apply_highlights(args.buf)
-        bind_qf_keymaps(args.buf)
+        for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+          local b = vim.api.nvim_win_get_buf(w)
+          if vim.bo[b].buftype == "quickfix" then
+            refresh_qf_buffer(b)
+          end
+        end
       end)
     end,
   })
