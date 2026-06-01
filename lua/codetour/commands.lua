@@ -30,11 +30,11 @@ function M.register()
     local depth = 0
     if args.args ~= "" then
       local parsed = tonumber(args.args)
-      if not parsed or parsed < 0 or parsed ~= math.floor(parsed) then
-        vim.notify("CodeTour: depth 必须是非负整数，收到 " .. args.args, vim.log.levels.ERROR)
+      if not parsed or parsed < 1 or parsed ~= math.floor(parsed) then
+        vim.notify("CodeTour: depth 必须是正整数（从1开始），收到 " .. args.args, vim.log.levels.ERROR)
         return
       end
-      depth = parsed
+      depth = parsed - 1
     end
     local title = vim.fn.input("Marker (函数名等，可留空): ")
     local desc = vim.fn.input("Description: ")
@@ -52,7 +52,7 @@ function M.register()
       result.title or "",
       vim.fs.basename(result.file),
       result.line,
-      result.depth
+      result.depth + 1
     ))
   end, { nargs = "?", desc = "把当前光标位置作为 step 加入正在录制的 tour，可选参数=depth (默认 0)" })
 
