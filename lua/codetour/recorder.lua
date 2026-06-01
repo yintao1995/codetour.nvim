@@ -57,7 +57,18 @@ function M.add_step(opts)
   if opts.title and opts.title ~= "" then
     step.title = opts.title
   end
-  table.insert(tour.steps, step)
+  local anchor = state.get_anchor()
+  if anchor then
+    table.insert(tour.steps, anchor + 1, step)
+    local new_anchor = anchor + 1
+    if new_anchor >= #tour.steps then
+      state.clear_anchor()
+    else
+      state.set_anchor(new_anchor)
+    end
+  else
+    table.insert(tour.steps, step)
+  end
   loader.save(tour)
   pcall(function()
     local title = vim.fn.getqflist({ title = 1 }).title or ""

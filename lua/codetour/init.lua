@@ -13,6 +13,7 @@ M.config = {
     undo = "u",
     redo = "<C-r>",
     edit_tour = "e",
+    activate = "a",
   },
 }
 
@@ -21,6 +22,7 @@ local function set_default_hl()
   vim.api.nvim_set_hl(0, "CodeTourTree", { link = "Normal", default = true })
   vim.api.nvim_set_hl(0, "CodeTourDesc", { link = "Comment", default = true })
   vim.api.nvim_set_hl(0, "CodeTourHint", { link = "Comment", default = true })
+  vim.api.nvim_set_hl(0, "CodeTourAnchor", { link = "DiagnosticHint", default = true })
 end
 
 local QF_TITLE_PREFIX = "CodeTour: "
@@ -66,6 +68,10 @@ function M.format_qf_hint()
   if ed then
     parts[#parts + 1] = string.format("%s edit", ed)
   end
+  local act = display_key(km.activate)
+  if act then
+    parts[#parts + 1] = string.format("%s anchor", act)
+  end
   return table.concat(parts, "  ")
 end
 
@@ -100,6 +106,24 @@ local function bind_qf_keymaps(bufnr)
   map(km.undo, with_lnum(editor.undo), "CodeTour: undo last edit")
   map(km.redo, with_lnum(editor.redo), "CodeTour: redo")
   map(km.edit_tour, function() editor.edit_tour_file() end, "CodeTour: edit .tour file")
+  map(km.activate, function()
+    local lnum = vim.api.nvim_win_get_cursor(0)[1]
+    local st = require("codetour.state")
+    local tour = st.active_tour()
+    if not tour then return end
+    local step_idx = lnum - 2
+    if step_idx < 1 or step_idx > #tour.steps then
+      st.clear_anchor()
+      vim.notify("CodeTour: anchor 已清除，add_step 将追加到末尾", vim.log.levels.INFO)
+    elseif st.get_anchor() == step_idx then
+      st.clear_anchor()
+      vim.notify("CodeTour: anchor 已清除", vim.log.levels.INFO)
+    else
+      st.set_anchor(step_idx)
+      vim.notify(string.format("CodeTour: anchor 设为第 %d 个 step，下次 add_step 将插入其后", step_idx), vim.log.levels.INFO)
+    end
+    require("codetour.runner").refresh_quickfix(tour)
+  end, "CodeTour: activate anchor at cursor")
 end
 
 local function unbind_qf_keymaps(bufnr)

@@ -155,6 +155,12 @@ function M.apply_highlights_to_buf(bufnr, items)
     end
   end
 
+  local anchor
+  do
+    local ok, st = pcall(require, "codetour.state")
+    if ok then anchor = st.get_anchor() end
+  end
+
   for line_idx, item in ipairs(items) do
     local ud = item.user_data or {}
     local row = line_idx - 1
@@ -176,6 +182,14 @@ function M.apply_highlights_to_buf(bufnr, items)
 
       pcall(vim.api.nvim_buf_add_highlight, bufnr, HL_NS, "CodeTourTree", row, 0, marker_block_byte)
       pcall(vim.api.nvim_buf_add_highlight, bufnr, HL_NS, "CodeTourDesc", row, fileline_block_byte_end, -1)
+      local step_idx = line_idx - 2
+      if anchor and step_idx == anchor then
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, HL_NS, row, 0, {
+          virt_text = { { " »", "CodeTourAnchor" } },
+          virt_text_pos = "eol",
+          hl_mode = "combine",
+        })
+      end
     end
   end
 end

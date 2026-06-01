@@ -2,12 +2,28 @@ local M = {}
 
 local _tour = nil
 local _step_idx = nil
+local _anchor = nil
 local _listeners = {}
 
 function M.reset()
   _tour = nil
   _step_idx = nil
+  _anchor = nil
   _listeners = {}
+end
+
+function M.get_anchor()
+  return _anchor
+end
+
+function M.set_anchor(idx)
+  if not _tour or not idx then _anchor = nil; return end
+  if idx < 1 or idx > #_tour.steps then _anchor = nil; return end
+  _anchor = idx
+end
+
+function M.clear_anchor()
+  _anchor = nil
 end
 
 function M.on(event, cb)
@@ -39,6 +55,7 @@ end
 function M.set_active_tour(tour)
   _tour = tour
   _step_idx = 1
+  _anchor = nil
   emit("tour_started", tour)
   emit("step_changed", _step_idx)
 end
@@ -56,6 +73,7 @@ function M.end_tour()
   local prev = _tour
   _tour = nil
   _step_idx = nil
+  _anchor = nil
   emit("tour_ended", prev)
 end
 
