@@ -36,8 +36,18 @@ function M.register()
       end
       depth = parsed - 1
     end
-    local title = vim.fn.input("Marker (函数名等，可留空): ")
-    local desc = vim.fn.input("Description: ")
+    local word = vim.fn.expand("<cword>")
+    local cancel = "\0__CODETOUR_CANCEL__\0"
+    local title = vim.fn.input({ prompt = "Marker (函数名等，可留空): ", default = word, cancelreturn = cancel })
+    if title == cancel then
+      vim.notify("CodeTour: 已取消添加 step", vim.log.levels.INFO)
+      return
+    end
+    local desc = vim.fn.input({ prompt = "Description: ", cancelreturn = cancel })
+    if desc == cancel then
+      vim.notify("CodeTour: 已取消添加 step", vim.log.levels.INFO)
+      return
+    end
     local ok, result = pcall(require("codetour.recorder").add_step, {
       title = title ~= "" and title or nil,
       description = desc,
