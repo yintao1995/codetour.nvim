@@ -156,8 +156,50 @@ end
 M._STEP_OFFSET = STEP_OFFSET
 M._MAX_HISTORY = MAX_HISTORY
 
+-- 在 .tour JSON 文件中找到第 step_idx 个 step 对象的起始行号（1-based）
+local function find_step_line(path, step_idx)
+  local fd = io.open(path, "r")
+  if not fd then return nil end
+  local in_steps = false
+  local brace_depth = 0
+  local step_count = 0
+  local line_nr = 0
+  for line in fd:lines() do
+    line_nr = line_nr + 1
+    if not in_steps then
+      if line:find('"steps"%s*:%s*%[') then
+        in_steps = true
+      end
+    else
+      local trimmed = line:match("^%s*(.-)%s*$")
+      if trimmed then
+        for i = 1, #trimmed do
+          local c = trimmed:sub(i, i)
+          if c == "{" then
+            brace_depth = brace_depth + 1
+            if brace_depth == 1 then
+              step_count = step_count + 1
+              if step_count == step_idx then
+                fd:close()
+                return line_nr
+              end
+            end
+          elseif c == "}" then
+            brace_depth = brace_depth - 1
+            if brace_depth < 0 then break end
+          end
+        end
+        if brace_depth < 0 then break end
+      end
+    end
+  end
+  fd:close()
+  return nil
+end
+
 -- 在非 quickfix 的窗口里打开当前 active tour 的 .tour JSON 文件，让用户直接编辑
-function M.edit_tour_file()
+-- step_idx（可选）：传入时自动跳转到该 step 在 JSON 中的起始行
+function M.edit_tour_file(step_idx)
   local tour = ensure_active()
   if not tour or not tour._path then return end
   -- 找一个非 qf 的窗口承载 tour 文件
@@ -175,6 +217,12 @@ function M.edit_tour_file()
     vim.cmd("vsplit")
   end
   vim.cmd("edit " .. vim.fn.fnameescape(tour._path))
+  if step_idx and step_idx >= 1 and step_idx <= #tour.steps then
+    local line_nr = find_step_line(tour._path, step_idx)
+    if line_nr then
+      vim.api.nvim_win_set_cursor(0, { line_nr, 0 })
+    end
+  end
 end
 
 return M

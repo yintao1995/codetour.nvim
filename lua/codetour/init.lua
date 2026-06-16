@@ -105,7 +105,10 @@ local function bind_qf_keymaps(bufnr)
   map(km.delete, with_lnum(editor.delete_step), "CodeTour: delete step")
   map(km.undo, with_lnum(editor.undo), "CodeTour: undo last edit")
   map(km.redo, with_lnum(editor.redo), "CodeTour: redo")
-  map(km.edit_tour, function() editor.edit_tour_file() end, "CodeTour: edit .tour file")
+  map(km.edit_tour, function()
+    local lnum = vim.api.nvim_win_get_cursor(0)[1]
+    editor.edit_tour_file(lnum - 2)
+  end, "CodeTour: edit .tour file")
   map(km.activate, function()
     local lnum = vim.api.nvim_win_get_cursor(0)[1]
     local st = require("codetour.state")

@@ -261,6 +261,33 @@ describe("codetour.editor", function()
         editor.edit_tour_file()
       end)
     end)
+
+    it("jumps to the corresponding step line in .tour JSON when step_idx given", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      vim.cmd("only")
+      editor.edit_tour_file(3) -- 跳到第 3 个 step (title=C)
+      local cursor = vim.api.nvim_win_get_cursor(0)
+      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      -- 光标所在行应为 step 3 对象的起始行（包含 '{'）
+      assert.is_truthy(lines[cursor[1]]:find("{"),
+        "cursor line should be the opening brace of step 3")
+      -- 该行之后应能很快找到 title=C
+      local found = false
+      for i = cursor[1], math.min(cursor[1] + 5, #lines) do
+        if lines[i]:find('"title"%s*:%s*"C"') then found = true; break end
+      end
+      assert.is_truthy(found, "lines after cursor should contain step 3's title 'C'")
+    end)
+
+    it("does not jump when step_idx is nil", function()
+      local tour = make_tour()
+      state.set_active_tour(tour)
+      vim.cmd("only")
+      editor.edit_tour_file()
+      -- 光标应在第 1 行（默认位置）
+      assert.equals(1, vim.api.nvim_win_get_cursor(0)[1])
+    end)
   end)
 
   describe("quickfix view preservation", function()
